@@ -1,0 +1,128 @@
+version: '2'
+
+services:
+  gitlab:
+    restart: always
+    image: sameersbn/gitlab:9.1.0-1
+    depends_on:
+      - redis
+      - database
+    ports:
+      - 80:80/tcp
+      - 443:443/tcp
+      - 22:22/tcp
+    networks:
+      - devops_network
+    volumes:
+      - ./gitlab/data:/home/git/data:Z
+      - ./certs:/home/git/data/certs:ro
+    environment:  
+      - GITLAB_TIMEZONE=Beijing
+      - GITLAB_ROOT_PASSWORD=yanfashi2017
+      - GITLAB_SIGNUP_ENABLED=false
+           
+      - GITLAB_HTTPS=true
+      - SSL_SELF_SIGNED=true
+     
+      - GITLAB_HOST=gitlab.gz.cmcc
+      - GITLAB_PORT=443
+      - GITLAB_SSH_PORT=22
+
+      - NGINX_HSTS_ENABLED=true
+      - NGINX_HSTS_MAXAGE=31536000
+
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB_NUMBER=0
+
+      - DB_ADAPTER=postgresql
+      - DB_HOST=database
+      - DB_PORT=5432
+      - DB_USER=gitlab
+      - DB_PASS=password
+      - DB_NAME=gitlabhq_production
+      - DB_POOL=10
+ 
+      - GITLAB_SECRETS_DB_KEY_BASE=RknWT7vM4sCrzfwcbmNRjfwcnbMmVTTTxpNk4Mrrtq4p9sHRNCpfjjHJ4F9mxTbz
+      - GITLAB_SECRETS_SECRET_KEY_BASE=CrmLsdpWPWPbfJ3dFntNLbcHsJhtqxqhJmfMkxNmLXwKkFTTpKPcJzP7nqWzJpN3
+      - GITLAB_SECRETS_OTP_KEY_BASE=hnbMdzzJTH4zbkgMTMvrbhMCrwXfThCvWnKLr47cTMMrt7RVfrnhJczpbCNdf7N3
+
+      - GITLAB_REGISTRY_ENABLED=true
+      - GITLAB_REGISTRY_HOST=hub.gz.cmcc
+      - GITLAB_REGISTRY_PORT=443
+      - GITLAB_REGISTRY_ISSUER=gitlab-issuer
+      - GITLAB_REGISTRY_API_URL=http://registry:5000
+      - GITLAB_REGISTRY_KEY_PATH=/home/git/data/certs/registry-server.key
+      - SSL_REGISTRY_KEY_PATH=/home/git/data/certs/registry.key
+      - SSL_REGISTRY_CERT_PATH=/home/git/data/certs/registry.crt
+
+  redis:
+    restart: always
+    image: redis:3.2.8-alpine
+    networks:
+      - devops_network
+    volumes:
+      - ./gitlab/redis:/data:Z
+
+  database:
+    restart: always
+    image: postgres:9.6.2-alpine
+    ports:
+      - 5432:5432
+    networks:
+      - devops_network
+    volumes:
+      - ./gitlab/postgresql:/var/lib/postgresql/data:Z
+    environment:
+      - POSTGRES_USER=gitlab
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=gitlabhq_production
+      - POSTGRES_INITDB_ARGS="--data-checksums"
+
+  registry:
+    restart: always
+    image: registry:2.6.1
+    depends_on:
+      - redis
+    ports:
+      - 5000:5000
+    networks:
+      - devops_network
+    volumes:
+      - ./certs/registry-server.crt:/certs/domain.crt:ro
+      - ./registry/repos:/var/lib/registry:Z
+    environment:
+      - REGISTRY_VERSION=1.0
+      
+      - REGISTRY_LOG_LEVEL=warn
+      - REGISTRY_LOG_FIELDS_SERVICE=registry
+      
+      - REGISTRY_STORAGE_CACHE_BLOBDESCRIPTOR=redis
+      - REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/var/lib/registry
+      - REGISTRY_STORAGE_DELETE_ENABLED=true
+
+      - REGISTRY_AUTH_TOKEN_REALM=https://gitlab.gz.cmcc/jwt/auth
+      - REGISTRY_AUTH_TOKEN_SERVICE=container_registry
+      - REGISTRY_AUTH_TOKEN_ISSUER=gitlab-issuer
+      - REGISTRY_AUTH_TOKEN_ROOTCERTBUNDLE=/certs/domain.crt
+
+      - REGISTRY_HTTP_ADDR=0.0.0.0:5000
+      - REGISTRY_HTTP_SECRET=asecretforlocaldevelopment
+      - REGISTRY_HTTP_HEADERS_X-CONTENT-TYPE-OPTIONS=[nosniff]
+      
+      - REGISTRY_REDIS_ADDR=redis:6379
+      - REGISTRY_REDIS_DB=1
+      - REGISTRY_REDIS_DIALTIMEOUT=10ms
+      - REGISTRY_REDIS_READTIMEOUT=10ms
+      - REGISTRY_REDIS_WRITETIMEOUT=10ms
+      - REGISTRY_REDIS_POOL_MAXIDLE=10
+      - REGISTRY_REDIS_POOL_MAXACTIVE=50
+      - REGISTRY_REDIS_POOL_IDLETIMEOUT=300s
+
+      - REGISTRY_HEALTH_STORAGEDRIVER_ENABLED=true
+      - REGISTRY_HEALTH_STORAGEDRIVER_INTERVAL=10s
+      - REGISTRY_HEALTH_STORAGEDRIVER_THRESHOLD=3
+ 
+networks:
+  devops_network:
+    external: true
